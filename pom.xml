@@ -14,22 +14,22 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
-    <repositories>
-        <repository>
-            <id>spark-jobserver</id>
-            <url>https://dl.bintray.com/spark-jobserver/maven</url>
-            <releases>
-                <enabled>true</enabled>
-                <updatePolicy>never</updatePolicy>
-                <checksumPolicy>warn</checksumPolicy>
-            </releases>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>never</updatePolicy>
-                <checksumPolicy>warn</checksumPolicy>
-            </snapshots>
-        </repository>
-    </repositories>
+    <!-- <repositories>
+         <repository>
+             <id>spark-jobserver</id>
+             <url>https://dl.bintray.com/spark-jobserver/maven</url>
+             <releases>
+                 <enabled>true</enabled>
+                 <updatePolicy>never</updatePolicy>
+                 <checksumPolicy>warn</checksumPolicy>
+             </releases>
+             <snapshots>
+                 <enabled>true</enabled>
+                 <updatePolicy>never</updatePolicy>
+                 <checksumPolicy>warn</checksumPolicy>
+             </snapshots>
+         </repository>
+     </repositories>-->
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
