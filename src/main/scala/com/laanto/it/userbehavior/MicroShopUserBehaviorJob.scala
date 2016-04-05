@@ -1,26 +1,20 @@
 package com.laanto.it.userbehavior
 
 
-import java.text.SimpleDateFormat
+import java.sql.Timestamp
 import java.util.{Calendar, Date}
 
 import com.mongodb.DBObject
 import com.mongodb.casbah.commons.MongoDBObject
 import com.mongodb.casbah.{MongoClient, MongoClientURI, MongoCollection}
-import com.stratio.datasource.mongodb._
-import com.stratio.datasource.mongodb.config.MongodbConfig._
-import com.stratio.datasource.mongodb.config.MongodbConfigBuilder
-import com.stratio.datasource.util.Config
+import com.mongodb.hadoop.{MongoInputFormat, MongoOutputFormat}
 import com.typesafe.config.ConfigFactory
-import org.apache.spark.sql.SQLContext
+import org.apache.hadoop.conf.Configuration
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.{SparkConf, SparkContext}
-import tachyon.{Constants, TachyonURI}
-import tachyon.client.ClientContext
-import tachyon.client.file.options.DeleteOptions
-import tachyon.client.file.options.DeleteOptions.Builder
-import tachyon.client.file.{TachyonFile, TachyonFileSystem}
+import org.bson.{BSONObject, BasicBSONObject}
 
 
 /**
@@ -28,8 +22,7 @@ import tachyon.client.file.{TachyonFile, TachyonFileSystem}
   */
 object MicroShopUserBehaviorJob {
 
-  private val userBehaviorSchema = StructType(StructField("appName", StringType, true) :: StructField("eventType", StringType, true) :: StructField("createTime", TimestampType, true) :: StructField("userId", StringType, true) :: StructField("userName", StringType, true) :: StructField("newsId", StringType, true) :: StructField("newsTitle", StringType, true) :: StructField("url", StringType, true) :: StructField("client", StringType, true) :: StructField("version", StringType, true) :: StructField("readFrom", StringType, true) :: Nil)
-
+  case class UserBehavior(appName: String, eventType: String, createTime: Timestamp, userId: String, userName: String, newsId: String, newsTitle: String, url: String, client: String, version: String, readFrom: String)
 
   def main(args: Array[String]) {
     //读取配置文件
@@ -40,22 +33,17 @@ object MicroShopUserBehaviorJob {
     val mongodbInputCollection = jobConfig.getString("mongodb-settings.inputCollection")
     val mongodbOutputDatabase = jobConfig.getString("mongodb-settings.outputDatabase")
     val mongodbOutputCollection = jobConfig.getString("mongodb-settings.outputCollection")
-    //    val tachyonHost = "tachyon://" + jobConfig.getString("tachyon-settings.host") + ":" + jobConfig.getInt("tachyon-settings.port")
-    //    val tachyonFileBasePath = jobConfig.getString("tachyon-settings.basePath")
     //创建sqlContext
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val sqlc = new HiveContext(sc)
-    val currentDate = getSearchDate(0)
-    //    val tachyonFile = tachyonFileBasePath + s"${formatDate(currentDate)}" + ".parquet"
-    //    val tfSystem = getTFSystem(tachyonHost)
+    import sqlc.implicits._
+
     //从mongoDB读取数据
-    val proReadConfig = MongodbConfigBuilder(Map(Host -> List(proMongodbHostPort), Database -> mongodbInputDatabase, Collection -> mongodbInputCollection, SamplingRatio -> 0.1, CursorBatchSize -> 1000)).build()
-    sqlc.fromMongoDB(proReadConfig, Some(userBehaviorSchema)).registerTempTable("userBehaviors")
+    val mongoInputUriConfig = setMongoUri("mongo.input.uri", proMongodbHostPort, mongodbInputDatabase, mongodbInputCollection)
+    val userBehaviorDF = readFromMongoDB(sc, mongoInputUriConfig).toDF
+    userBehaviorDF.registerTempTable("userBehaviors")
     sqlc.cacheTable("userBehaviors")
-    //sqlc.fromMongoDB(proReadConfig, Some(userBehaviorSchema)).write.parquet(tachyonHost + tachyonFile)
-    // userBehaviorsDF.where(userBehaviorsDF("createTime") > new java.sql.Timestamp(getSearchDate(0).getTime)).registerTempTable("userBehaviors")
-    //sqlc.read.parquet(tachyonHost + tachyonFile).registerTempTable("userBehaviors")
 
     //设置shuffle数
     sqlc.sql("SET spark.sql.shuffle.partitions=20")
@@ -64,12 +52,12 @@ object MicroShopUserBehaviorJob {
     val preProMongoClient = getMongoClient(preProMongodbHostPort)
     val proOutputCollection = getMongoCollection(proMongoClient, mongodbOutputDatabase, mongodbOutputCollection)
     val preProOutputCollection = getMongoCollection(preProMongoClient, mongodbOutputDatabase, mongodbOutputCollection)
-    val proSaveConfig = MongodbConfigBuilder(Map(Host -> List(proMongodbHostPort), Database -> mongodbOutputDatabase, Collection -> mongodbOutputCollection, SamplingRatio -> 0.1, WriteConcern -> "normal", CursorBatchSize -> 1000)).build()
-    val preProSaveConfig = MongodbConfigBuilder(Map(Host -> List(preProMongodbHostPort), Database -> mongodbOutputDatabase, Collection -> mongodbOutputCollection, SamplingRatio -> 0.1, WriteConcern -> "normal", CursorBatchSize -> 1000)).build()
+    val proMongoOutputUriConfig = setMongoUri("mongo.output.uri", proMongodbHostPort, mongodbOutputDatabase, mongodbOutputCollection)
+    val preProMongoOutputUriConfig = setMongoUri("mongo.output.uri", preProMongodbHostPort, mongodbOutputDatabase, mongodbOutputCollection)
 
     //sql1：统计微店热度
     val statisShopSql =
-      """select appName,
+      """select 'micro-shop' appName,
         |to_date(createTime) statisDate,
         |count(distinct userId) uv,
         |count(*) pv,
@@ -82,16 +70,18 @@ object MicroShopUserBehaviorJob {
         |and createTime >= current_date()
         |and createTime <= current_timestamp()
         |group by appName, to_date(createTime)""".stripMargin.replaceAll("\n", " ")
-
-    val statisShopQuery = MongoDBObject(("appName", "weixin-consultation"), ("shopId", "1001"), ("statisType", "statisShop"), ("statisDate", getSearchDate(0)))
-    //save to pro
-    executeSqlAndSave(sqlc, statisShopSql, proOutputCollection, statisShopQuery, proSaveConfig)
-    //save to pre-pro
-    executeSqlAndSave(sqlc, statisShopSql, preProOutputCollection, statisShopQuery, preProSaveConfig)
+    // 把查询的结果转换成mongo的bsonObject
+    val statisShopPairRDD = sqlc.sql(statisShopSql).rdd.map({
+      case Row(appName: String, statisDate: java.sql.Date, uv: Long, pv: Long, shopId: String, statisType: String) => new BasicBSONObject().append("appName", appName).append("statisDate", statisDate).append("uv", uv).append("pv", pv).append("shopId", shopId).append("statisType", statisType)
+    }).map(bson => (null, bson))
+    val statisShopQuery = MongoDBObject(("appName", "micro-shop"), ("shopId", "1001"), ("statisType", "statisShop"), ("statisDate", getSearchDate(0)))
+    //把查询结果存回数据库
+    saveBackToMongo(statisShopPairRDD, statisShopQuery, proOutputCollection, proMongoOutputUriConfig)
+    saveBackToMongo(statisShopPairRDD, statisShopQuery, preProOutputCollection, preProMongoOutputUriConfig)
 
     //sql2：统计微店产品热度
     val statisShopProductSql =
-      """select appName,
+      """select 'micro-shop' appName,
         |newsId,
         |count(distinct userId) uv,
         |count(*) pv,
@@ -103,17 +93,16 @@ object MicroShopUserBehaviorJob {
         |and userId is not null and userId <> '-1'
         |group by appName, newsId
         |order by uv desc, pv desc""".stripMargin.replaceAll("\n", " ")
-
-    val statisShopProductQuery = MongoDBObject(("appName", "weixin-consultation"), ("shopId", "1001"), ("statisType", "statisShopProduct"))
-    //save to pro
-    executeSqlAndSave(sqlc, statisShopProductSql, proOutputCollection, statisShopProductQuery, proSaveConfig)
-    //save to pre-pro
-    executeSqlAndSave(sqlc, statisShopProductSql, preProOutputCollection, statisShopProductQuery, preProSaveConfig)
+    val statisShopProductPairRDD = sqlc.sql(statisShopProductSql).rdd.map({
+      case Row(appName: String, newsId: String, uv: Long, pv: Long, shopId: String, statisType: String) => new BasicBSONObject().append("appName", appName).append("newsId", newsId).append("uv", uv).append("pv", pv).append("shopId", shopId).append("statisType", statisType)
+    }).map(bson => (null, bson))
+    val statisShopProductQuery = MongoDBObject(("appName", "micro-shop"), ("shopId", "1001"), ("statisType", "statisShopProduct"))
+    saveBackToMongo(statisShopProductPairRDD, statisShopProductQuery, proOutputCollection, proMongoOutputUriConfig)
+    saveBackToMongo(statisShopProductPairRDD, statisShopProductQuery, preProOutputCollection, preProMongoOutputUriConfig)
 
     //sql3：统计微店最近访客
     val statisShopVisitorSql =
-      """select
-        |appName,
+      """select 'micro-shop' appName,
         |userId,
         |max(createTime) visitTime,
         |'1001' shopId,
@@ -125,31 +114,46 @@ object MicroShopUserBehaviorJob {
         |group by appName, userId
         |order by max(createTime) desc
         |limit 100""".stripMargin.replaceAll("\n", " ")
+    val statisShopVisitorPairRDD = sqlc.sql(statisShopVisitorSql).rdd.map({
+      case Row(appName: String, userId: String, visitTime: Timestamp, shopId: String, statisType: String) => new BasicBSONObject().append("appName", appName).append("userId", userId).append("visitTime", visitTime).append("shopId", shopId).append("statisType", statisType)
+    }).map(bson => (null, bson))
+    val statisShopVisitorQuery = MongoDBObject(("appName", "micro-shop"), ("shopId", "1001"), ("statisType", "statisShopVisitor"))
+    saveBackToMongo(statisShopVisitorPairRDD, statisShopVisitorQuery, proOutputCollection, proMongoOutputUriConfig)
+    saveBackToMongo(statisShopVisitorPairRDD, statisShopVisitorQuery, preProOutputCollection, preProMongoOutputUriConfig)
 
-    val statisShopVisitorQuery = MongoDBObject(("appName", "weixin-consultation"), ("shopId", "1001"), ("statisType", "statisShopVisitor"))
-    //save to pro
-    executeSqlAndSave(sqlc, statisShopVisitorSql, proOutputCollection, statisShopVisitorQuery, proSaveConfig)
-    //save to pre-pro
-    executeSqlAndSave(sqlc, statisShopVisitorSql, preProOutputCollection, statisShopVisitorQuery, preProSaveConfig)
     sqlc.clearCache()
-
     if (proMongoClient != null) {
       proMongoClient.close()
     }
     if (preProMongoClient != null) {
       preProMongoClient.close()
     }
-    //    if (ifExists(tfSystem, tachyonFile)) {
-    //      deleteFile(tfSystem, tachyonFile)
-    //    }
-    //sc.stop()
     System.exit(0)
   }
 
+  private def saveBackToMongo(statisShopPairRDD: RDD[(Null, BasicBSONObject)], statisShopQuery: DBObject, collection: MongoCollection, mongoConfig: Configuration): Unit = {
+    collection.remove(statisShopQuery)
+    statisShopPairRDD.saveAsNewAPIHadoopFile("file:///bogus", classOf[Object], classOf[BSONObject], classOf[MongoOutputFormat[Object, BSONObject]], mongoConfig)
+  }
 
-  private def executeSqlAndSave(sqlc: SQLContext, sql: String, outputCollection: MongoCollection, query: DBObject, mongoConfig: Config): Unit = {
-    outputCollection.remove(query)
-    sqlc.sql(sql).saveToMongodb(mongoConfig)
+  //读取mongo的数据
+  private def readFromMongoDB(sc: SparkContext, mongoConfig: Configuration): RDD[UserBehavior] = {
+    val mongoPairRDD = sc.newAPIHadoopRDD(mongoConfig, classOf[MongoInputFormat], classOf[Object], classOf[BSONObject])
+    //把读取的原始Mongo BSONObject数据转换 case class object 对象
+    mongoPairRDD.values.map(obj => {
+      val appName: String = if (obj.get("appName") != null) obj.get("appName").toString else null
+      val eventType: String = if (obj.get("eventType") != null) obj.get("eventType").toString else null
+      val createTime: Timestamp = if (obj.get("createTime") != null) new Timestamp(obj.get("createTime").asInstanceOf[Date].getTime()); else null
+      val userId: String = if (obj.get("userId") != null) obj.get("userId").toString else null
+      val userName: String = if (obj.get("userName") != null) obj.get("userName").toString else null
+      val newsId: String = if (obj.get("newsId") != null) obj.get("newsId").toString else null
+      val newsTitle: String = if (obj.get("newsTitle") != null) obj.get("newsTitle").toString else null
+      val url: String = if (obj.get("url") != null) obj.get("url").toString else null
+      val client: String = if (obj.get("client") != null) obj.get("client").toString else null
+      val version: String = if (obj.get("version") != null) obj.get("version").toString else null
+      val readFrom: String = if (obj.get("readFrom") != null) obj.get("readFrom").toString else null
+      UserBehavior(appName, eventType, createTime, userId, userName, newsId, newsTitle, url, client, version, readFrom)
+    })
   }
 
   private def getMongoClient(mongodbHostPort: String): MongoClient = {
@@ -161,9 +165,11 @@ object MicroShopUserBehaviorJob {
     db(mongodbCollection)
   }
 
-  private def formatDate(date: Date): String = {
-    val sdf = new SimpleDateFormat("yyyy-MM-dd")
-    sdf.format(date)
+  //设置mongo数据连接地址
+  private def setMongoUri(key: String, mongodbHostPort: String, mongodbDatabase: String, mongodbCollection: String): Configuration = {
+    val mongoConfig = new Configuration()
+    mongoConfig.set(key, "mongodb://" + mongodbHostPort + "/" + mongodbDatabase + "." + mongodbCollection)
+    mongoConfig
   }
 
   //获取结束查询时间
@@ -177,26 +183,4 @@ object MicroShopUserBehaviorJob {
     cal.getTime()
   }
 
-  private def ifExists(tachyonFileSystem: TachyonFileSystem, file: String): Boolean = {
-    val dataFileURI = new TachyonURI(file)
-    val dataFile: Option[TachyonFile] = Option(tachyonFileSystem.openIfExists(dataFileURI))
-    if (dataFile.isDefined) true else false
-  }
-
-  private def deleteFile(tachyonFileSystem: TachyonFileSystem, file: String): Unit = {
-    val dataFile: Option[TachyonFile] = Option(tachyonFileSystem.openIfExists(new TachyonURI(file)))
-    val deleteOptions: DeleteOptions = new Builder(ClientContext.getConf).setRecursive(true).build
-    tachyonFileSystem.delete(dataFile.get, deleteOptions)
-  }
-
-  private def getTFSystem(tachyonMaster: String): TachyonFileSystem = {
-    val mMasterLocation = new TachyonURI(tachyonMaster)
-    val mTachyonConf = ClientContext.getConf()
-    mTachyonConf.set(Constants.MASTER_HOSTNAME, mMasterLocation.getHost)
-    mTachyonConf.set(Constants.MASTER_PORT, Integer.toString(mMasterLocation.getPort))
-    mTachyonConf.set(Constants.ZOOKEEPER_ENABLED, "false")
-    ClientContext.reset(mTachyonConf)
-    val tachyonFileSystem: TachyonFileSystem = TachyonFileSystem.TachyonFileSystemFactory.get()
-    tachyonFileSystem
-  }
 }
