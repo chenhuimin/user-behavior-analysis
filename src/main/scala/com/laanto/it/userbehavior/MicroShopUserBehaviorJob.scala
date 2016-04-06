@@ -131,13 +131,13 @@ object MicroShopUserBehaviorJob {
     System.exit(0)
   }
 
-  private def saveBackToMongo(statisShopPairRDD: RDD[(Null, BasicBSONObject)], statisShopQuery: DBObject, collection: MongoCollection, mongoConfig: Configuration): Unit = {
+   def saveBackToMongo(statisShopPairRDD: RDD[(Null, BasicBSONObject)], statisShopQuery: DBObject, collection: MongoCollection, mongoConfig: Configuration): Unit = {
     collection.remove(statisShopQuery)
     statisShopPairRDD.saveAsNewAPIHadoopFile("file:///bogus", classOf[Object], classOf[BSONObject], classOf[MongoOutputFormat[Object, BSONObject]], mongoConfig)
   }
 
   //读取mongo的数据
-  private def readFromMongoDB(sc: SparkContext, mongoConfig: Configuration): RDD[UserBehavior] = {
+   def readFromMongoDB(sc: SparkContext, mongoConfig: Configuration): RDD[UserBehavior] = {
     val mongoPairRDD = sc.newAPIHadoopRDD(mongoConfig, classOf[MongoInputFormat], classOf[Object], classOf[BSONObject])
     //把读取的原始Mongo BSONObject数据转换 case class object 对象
     mongoPairRDD.values.map(obj => {
@@ -156,24 +156,24 @@ object MicroShopUserBehaviorJob {
     })
   }
 
-  private def getMongoClient(mongodbHostPort: String): MongoClient = {
+   def getMongoClient(mongodbHostPort: String): MongoClient = {
     MongoClient(MongoClientURI("mongodb://" + mongodbHostPort))
   }
 
-  private def getMongoCollection(mongoClient: MongoClient, mongodbDatabase: String, mongodbCollection: String): MongoCollection = {
+   def getMongoCollection(mongoClient: MongoClient, mongodbDatabase: String, mongodbCollection: String): MongoCollection = {
     val db = mongoClient(mongodbDatabase)
     db(mongodbCollection)
   }
 
   //设置mongo数据连接地址
-  private def setMongoUri(key: String, mongodbHostPort: String, mongodbDatabase: String, mongodbCollection: String): Configuration = {
+   def setMongoUri(key: String, mongodbHostPort: String, mongodbDatabase: String, mongodbCollection: String): Configuration = {
     val mongoConfig = new Configuration()
     mongoConfig.set(key, "mongodb://" + mongodbHostPort + "/" + mongodbDatabase + "." + mongodbCollection)
     mongoConfig
   }
 
   //获取结束查询时间
-  private def getSearchDate(addDays: Int): Date = {
+   def getSearchDate(addDays: Int): Date = {
     val cal: Calendar = Calendar.getInstance()
     cal.set(Calendar.HOUR_OF_DAY, 0)
     cal.set(Calendar.MINUTE, 0)
