@@ -23,51 +23,6 @@ object StarProductUserBehaviorJob {
 
   case class StarProductBehavior(appName: String, eventType: String, createTime: Timestamp, mobile: String, policyPlanId: String, policyPlanName: String, companyName: String, client: String, version: String, readFrom: String)
 
-  def main(args: Array[String]) {
-    //读取配置文件
-    val jobConfig = ConfigFactory.load("application.conf")
-    val proMongodbHostPort = jobConfig.getString("mongodb-settings.proHost") + ":" + jobConfig.getInt("mongodb-settings.proPort")
-    val preProMongodbHostPort = jobConfig.getString("mongodb-settings.preProHost") + ":" + jobConfig.getInt("mongodb-settings.preProPort")
-    val mongodbInputDatabase = jobConfig.getString("mongodb-settings.inputDatabase")
-    val mongodbInputCollection = jobConfig.getString("mongodb-settings.inputCollection")
-    val mongodbOutputDatabase = jobConfig.getString("mongodb-settings.outputDatabase")
-    val mongodbOutputCollection = jobConfig.getString("mongodb-settings.outputCollection")
-    //创建sqlContext
-    val conf = new SparkConf()
-    val sc = new SparkContext(conf)
-    val sqlc = new HiveContext(sc)
-    import sqlc.implicits._
-
-    //从mongoDB读取数据
-    val mongoInputUriConfig = setMongoUri("mongo.input.uri", proMongodbHostPort, mongodbInputDatabase, mongodbInputCollection)
-    //设置查询条件
-    val appName = "star-product"
-    val mongoInputQuery: String = """{"appName":"""" + s"${appName}" +""""}"""
-    mongoInputUriConfig.set("mongo.input.query", mongoInputQuery)
-    val starProductBehaviorDF = readFromMongoDB(sc, mongoInputUriConfig).toDF
-    starProductBehaviorDF.registerTempTable("starProductBehavior")
-    sqlc.cacheTable("starProductBehavior")
-
-    //设置shuffle数
-    sqlc.sql("SET spark.sql.shuffle.partitions=20")
-
-    //    val proMongoClient = getMongoClient(proMongodbHostPort)
-    //    val preProMongoClient = getMongoClient(preProMongodbHostPort)
-    //    val proOutputCollection = getMongoCollection(proMongoClient, mongodbOutputDatabase, mongodbOutputCollection)
-    //    val preProOutputCollection = getMongoCollection(preProMongoClient, mongodbOutputDatabase, mongodbOutputCollection)
-    //    val proMongoOutputUriConfig = setMongoUri("mongo.output.uri", proMongodbHostPort, mongodbOutputDatabase, mongodbOutputCollection)
-    //    val preProMongoOutputUriConfig = setMongoUri("mongo.output.uri", preProMongodbHostPort, mongodbOutputDatabase, mongodbOutputCollection)
-    //
-    //    sqlc.clearCache()
-    //    if (proMongoClient != null) {
-    //      proMongoClient.close()
-    //    }
-    //    if (preProMongoClient != null) {
-    //      preProMongoClient.close()
-    //    }
-    //    System.exit(0)
-  }
-
   def saveBackToMongo(statisPairRDD: RDD[(Null, BasicBSONObject)], query: DBObject, collection: MongoCollection, mongoConfig: Configuration): Unit = {
     collection.remove(query)
     statisPairRDD.saveAsNewAPIHadoopFile("file:///bogus", classOf[Object], classOf[BSONObject], classOf[MongoOutputFormat[Object, BSONObject]], mongoConfig)
@@ -118,5 +73,51 @@ object StarProductUserBehaviorJob {
     cal.add(Calendar.DAY_OF_MONTH, addDays)
     cal.getTime()
   }
+
+  def main(args: Array[String]) {
+    //读取配置文件
+    val jobConfig = ConfigFactory.load("application.conf")
+    val proMongodbHostPort = jobConfig.getString("mongodb-settings.proHost") + ":" + jobConfig.getInt("mongodb-settings.proPort")
+    val preProMongodbHostPort = jobConfig.getString("mongodb-settings.preProHost") + ":" + jobConfig.getInt("mongodb-settings.preProPort")
+    val mongodbInputDatabase = jobConfig.getString("mongodb-settings.inputDatabase")
+    val mongodbInputCollection = jobConfig.getString("mongodb-settings.inputCollection")
+    val mongodbOutputDatabase = jobConfig.getString("mongodb-settings.outputDatabase")
+    val mongodbOutputCollection = jobConfig.getString("mongodb-settings.outputCollection")
+    //创建sqlContext
+    val conf = new SparkConf()
+    val sc = new SparkContext(conf)
+    val sqlc = new HiveContext(sc)
+    import sqlc.implicits._
+
+    //从mongoDB读取数据
+    val mongoInputUriConfig = setMongoUri("mongo.input.uri", proMongodbHostPort, mongodbInputDatabase, mongodbInputCollection)
+    //设置查询条件
+    val appName = "star-product"
+    val mongoInputQuery: String = """{"appName":"""" + s"${appName}" +""""}"""
+    mongoInputUriConfig.set("mongo.input.query", mongoInputQuery)
+    val starProductBehaviorDF = readFromMongoDB(sc, mongoInputUriConfig).toDF
+    starProductBehaviorDF.registerTempTable("starProductBehavior")
+    sqlc.cacheTable("starProductBehavior")
+
+    //设置shuffle数
+    sqlc.sql("SET spark.sql.shuffle.partitions=20")
+
+    //    val proMongoClient = getMongoClient(proMongodbHostPort)
+    //    val preProMongoClient = getMongoClient(preProMongodbHostPort)
+    //    val proOutputCollection = getMongoCollection(proMongoClient, mongodbOutputDatabase, mongodbOutputCollection)
+    //    val preProOutputCollection = getMongoCollection(preProMongoClient, mongodbOutputDatabase, mongodbOutputCollection)
+    //    val proMongoOutputUriConfig = setMongoUri("mongo.output.uri", proMongodbHostPort, mongodbOutputDatabase, mongodbOutputCollection)
+    //    val preProMongoOutputUriConfig = setMongoUri("mongo.output.uri", preProMongodbHostPort, mongodbOutputDatabase, mongodbOutputCollection)
+    //
+    //    sqlc.clearCache()
+    //    if (proMongoClient != null) {
+    //      proMongoClient.close()
+    //    }
+    //    if (preProMongoClient != null) {
+    //      preProMongoClient.close()
+    //    }
+    //    System.exit(0)
+  }
+
 
 }
