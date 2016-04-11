@@ -22,7 +22,7 @@ import org.bson.{BSONObject, BasicBSONObject}
   */
 object MicroShopUserBehaviorJob {
 
-  case class MicroShopUserBehavior(appName: String, eventType: String, createTime: Timestamp, userId: String, userName: String, shopUuid: String, productId: String, productType: String, productName: String, readFrom: String, shareTo: String)
+  case class MicroShopUserBehavior(appName: String, eventType: String, createTime: Timestamp, userId: String, userName: String, shopUuid: String, productId: String, productType: String, productName: String, readFrom: String, shareTo: String, client: String)
 
   object StatisType extends Enumeration {
     val STATIS_SHOP = Value("statisShop")
@@ -51,7 +51,8 @@ object MicroShopUserBehaviorJob {
       val productName: String = if (obj.get("productName") != null) obj.get("productName").toString else null
       val readFrom: String = if (obj.get("readFrom") != null) obj.get("readFrom").toString else null
       val shareTo: String = if (obj.get("shareTo") != null) obj.get("shareTo").toString else null
-      MicroShopUserBehavior(appName, eventType, createTime, userId, userName, shopUuid, productId, productType, productName, readFrom, shareTo)
+      val client: String = if (obj.get("client") != null) obj.get("client").toString else null
+      MicroShopUserBehavior(appName, eventType, createTime, userId, userName, shopUuid, productId, productType, productName, readFrom, shareTo, client)
     })
   }
 
@@ -149,8 +150,8 @@ object MicroShopUserBehaviorJob {
         |'statisShopProduct' statisType
         |from microShopUserBehavior
         |where eventType='2'
-        |and productType is not null
-        |and productId is not null
+        |and productType is not null and productType <> ''
+        |and productId is not null and productId <> ''
         |and userId is not null and userId <> '-1'
         |group by shopUuid, productType, productId
         |order by uv desc, pv desc""".stripMargin.replaceAll("\n", " ")
