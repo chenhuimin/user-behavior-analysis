@@ -77,12 +77,11 @@ object StarProductUserBehaviorJob {
   def main(args: Array[String]) {
     //读取配置文件
     val jobConfig = ConfigFactory.load("application.conf")
-    val proMongodbHostPort = jobConfig.getString("mongodb-settings.proHost") + ":" + jobConfig.getInt("mongodb-settings.proPort")
-    val preProMongodbHostPort = jobConfig.getString("mongodb-settings.preProHost") + ":" + jobConfig.getInt("mongodb-settings.preProPort")
-    val mongodbInputDatabase = jobConfig.getString("mongodb-settings.inputDatabase")
-    val mongodbInputCollection = jobConfig.getString("mongodb-settings.inputCollection")
-    val mongodbOutputDatabase = jobConfig.getString("mongodb-settings.outputDatabase")
-    val mongodbOutputCollection = jobConfig.getString("mongodb-settings.outputCollection")
+    val mongodbHostPortStr = jobConfig.getString("mongodb-settings.host") + ":" + jobConfig.getInt("mongodb-settings.port")
+    val mongodbInputDatabaseStr = jobConfig.getString("mongodb-settings.inputDatabase")
+    val mongodbInputCollectionStr = jobConfig.getString("mongodb-settings.inputCollection")
+    val mongodbOutputDatabaseStr = jobConfig.getString("mongodb-settings.outputDatabase")
+    val mongodbOutputCollectionStr = jobConfig.getString("mongodb-settings.outputCollection")
     //创建sqlContext
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
@@ -90,7 +89,7 @@ object StarProductUserBehaviorJob {
     import sqlc.implicits._
 
     //从mongoDB读取数据
-    val mongoInputUriConfig = setMongoUri("mongo.input.uri", proMongodbHostPort, mongodbInputDatabase, mongodbInputCollection)
+    val mongoInputUriConfig = setMongoUri("mongo.input.uri", mongodbHostPortStr, mongodbInputDatabaseStr, mongodbInputCollectionStr)
     //设置查询条件
     val appName = "star-product"
     val mongoInputQuery: String = """{"appName":"""" + s"${appName}" +""""}"""

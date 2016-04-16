@@ -26,6 +26,7 @@ object MicroShopUserBehaviorJob {
 
   object StatisType extends Enumeration {
     val STATIS_SHOP = Value("statisShop")
+    val STATIS_SHOP_TOTAL_UV = Value("statisShopTotalUV")
     val STATIS_SHOP_PRODUCT = Value("statisShopProduct")
     val STATIS_SHOP_VISITOR = Value("statisShopVisitor")
   }
@@ -86,12 +87,11 @@ object MicroShopUserBehaviorJob {
   def main(args: Array[String]) {
     //读取配置文件
     val jobConfig = ConfigFactory.load("application.conf")
-    val proMongodbHostPort = jobConfig.getString("mongodb-settings.proHost") + ":" + jobConfig.getInt("mongodb-settings.proPort")
-    val preProMongodbHostPort = jobConfig.getString("mongodb-settings.preProHost") + ":" + jobConfig.getInt("mongodb-settings.preProPort")
-    val mongodbInputDatabase = jobConfig.getString("mongodb-settings.inputDatabase")
-    val mongodbInputCollection = jobConfig.getString("mongodb-settings.inputCollection")
-    val mongodbOutputDatabase = jobConfig.getString("mongodb-settings.outputDatabase")
-    val mongodbOutputCollection = jobConfig.getString("mongodb-settings.outputCollection")
+    val mongodbHostPortStr = jobConfig.getString("mongodb-settings.host") + ":" + jobConfig.getInt("mongodb-settings.port")
+    val mongodbInputDatabaseStr = jobConfig.getString("mongodb-settings.inputDatabase")
+    val mongodbInputCollectionStr = jobConfig.getString("mongodb-settings.inputCollection")
+    val mongodbOutputDatabaseStr = jobConfig.getString("mongodb-settings.outputDatabase")
+    val mongodbOutputCollectionStr = jobConfig.getString("mongodb-settings.outputCollection")
     //创建sqlContext
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
@@ -99,7 +99,7 @@ object MicroShopUserBehaviorJob {
     import sqlc.implicits._
 
     //从mongoDB读取数据
-    val mongoInputUriConfig = setMongoUri("mongo.input.uri", preProMongodbHostPort, mongodbInputDatabase, mongodbInputCollection)
+    val mongoInputUriConfig = setMongoUri("mongo.input.uri", mongodbHostPortStr, mongodbInputDatabaseStr, mongodbInputCollectionStr)
     //设置查询条件
     val appName = "micro-shop"
     val mongoInputQuery: String = """{"appName":"""" + s"${appName}" +""""}"""
@@ -111,12 +111,9 @@ object MicroShopUserBehaviorJob {
     //设置shuffle数
     sqlc.sql("SET spark.sql.shuffle.partitions=20")
 
-    val proMongoClient = getMongoClient(proMongodbHostPort)
-    val preProMongoClient = getMongoClient(preProMongodbHostPort)
-    val proOutputCollection = getMongoCollection(proMongoClient, mongodbOutputDatabase, mongodbOutputCollection)
-    val preProOutputCollection = getMongoCollection(preProMongoClient, mongodbOutputDatabase, mongodbOutputCollection)
-    val proMongoOutputUriConfig = setMongoUri("mongo.output.uri", proMongodbHostPort, mongodbOutputDatabase, mongodbOutputCollection)
-    val preProMongoOutputUriConfig = setMongoUri("mongo.output.uri", preProMongodbHostPort, mongodbOutputDatabase, mongodbOutputCollection)
+    val mongoClient = getMongoClient(mongodbHostPortStr)
+    val mongoOutputCollection = getMongoCollection(mongoClient, mongodbOutputDatabaseStr, mongodbOutputCollectionStr)
+    val mongoOutputUriConfig = setMongoUri("mongo.output.uri", mongodbHostPortStr, mongodbOutputDatabaseStr, mongodbOutputCollectionStr)
 
     //sql1：统计微店热度
     val statisShopSql =
@@ -137,10 +134,26 @@ object MicroShopUserBehaviorJob {
     }).map(bson => (null, bson))
     val statisShopQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_SHOP.toString), ("statisDate", getSearchDate(0)))
     //把查询结果存回数据库
-    saveBackToMongo(statisShopPairRDD, statisShopQuery, proOutputCollection, proMongoOutputUriConfig)
-    saveBackToMongo(statisShopPairRDD, statisShopQuery, preProOutputCollection, preProMongoOutputUriConfig)
+    saveBackToMongo(statisShopPairRDD, statisShopQuery, mongoOutputCollection, mongoOutputUriConfig)
 
-    //sql2：统计微店产品热度
+    //sql2：统计微店累计访问用户数
+    val statisShopTotalUVSql =
+      """select shopUuid,
+        |count(distinct userId) totalUV,
+        |'statisShopTotalUV' statisType
+        |from microShopUserBehavior
+        |where eventType='0'
+        |and userId is not null and userId <> '-1'
+        |group by shopUuid""".stripMargin.replaceAll("\n", " ")
+    // 把查询的结果转换成mongo的bsonObject
+    val statisShopTotalUVPairRDD = sqlc.sql(statisShopTotalUVSql).rdd.map({
+      case Row(shopUuid: String, totalUV: Long, statisType: String) => new BasicBSONObject().append("appName", appName).append("shopUuid", shopUuid).append("totalUV", totalUV).append("statisType", statisType)
+    }).map(bson => (null, bson))
+    val statisShopTotalUVQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_SHOP_TOTAL_UV.toString), ("statisDate", getSearchDate(0)))
+    //把查询结果存回数据库
+    saveBackToMongo(statisShopTotalUVPairRDD, statisShopTotalUVQuery, mongoOutputCollection, mongoOutputUriConfig)
+
+    //sql3：统计微店产品热度
     val statisShopProductSql =
       """select shopUuid,
         |productType,
@@ -159,10 +172,9 @@ object MicroShopUserBehaviorJob {
       case Row(shopUuid: String, productType: String, productId: String, uv: Long, pv: Long, statisType: String) => new BasicBSONObject().append("appName", appName).append("shopUuid", shopUuid).append("productType", productType).append("productId", productId).append("uv", uv).append("pv", pv).append("statisType", statisType)
     }).map(bson => (null, bson))
     val statisShopProductQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_SHOP_PRODUCT.toString))
-    saveBackToMongo(statisShopProductPairRDD, statisShopProductQuery, proOutputCollection, proMongoOutputUriConfig)
-    saveBackToMongo(statisShopProductPairRDD, statisShopProductQuery, preProOutputCollection, preProMongoOutputUriConfig)
+    saveBackToMongo(statisShopProductPairRDD, statisShopProductQuery, mongoOutputCollection, mongoOutputUriConfig)
 
-    //sql3：统计微店最近访客
+    //sql4：统计微店最近访客
     val statisShopVisitorSql =
       """select shopUuid,
         |userId,
@@ -178,15 +190,10 @@ object MicroShopUserBehaviorJob {
       case Row(shopUuid: String, userId: String, visitTime: Timestamp, statisType: String) => new BasicBSONObject().append("appName", appName).append("shopUuid", shopUuid).append("userId", userId).append("visitTime", visitTime).append("statisType", statisType)
     }).map(bson => (null, bson))
     val statisShopVisitorQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_SHOP_VISITOR.toString))
-    saveBackToMongo(statisShopVisitorPairRDD, statisShopVisitorQuery, proOutputCollection, proMongoOutputUriConfig)
-    saveBackToMongo(statisShopVisitorPairRDD, statisShopVisitorQuery, preProOutputCollection, preProMongoOutputUriConfig)
-
+    saveBackToMongo(statisShopVisitorPairRDD, statisShopVisitorQuery, mongoOutputCollection, mongoOutputUriConfig)
     sqlc.clearCache()
-    if (proMongoClient != null) {
-      proMongoClient.close()
-    }
-    if (preProMongoClient != null) {
-      preProMongoClient.close()
+    if (mongoClient != null) {
+      mongoClient.close()
     }
     System.exit(0)
   }
