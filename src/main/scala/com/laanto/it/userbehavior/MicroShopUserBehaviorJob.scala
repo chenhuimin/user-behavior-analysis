@@ -26,7 +26,6 @@ object MicroShopUserBehaviorJob {
 
   object StatisType extends Enumeration {
     val STATIS_SHOP = Value("statisShop")
-    val STATIS_SHOP_TOTAL_UV = Value("statisShopTotalUV")
     val STATIS_SHOP_PRODUCT = Value("statisShopProduct")
     val STATIS_SHOP_VISITOR = Value("statisShopVisitor")
   }
@@ -136,24 +135,7 @@ object MicroShopUserBehaviorJob {
     //把查询结果存回数据库
     saveBackToMongo(statisShopPairRDD, statisShopQuery, mongoOutputCollection, mongoOutputUriConfig)
 
-    //sql2：统计微店累计访问用户数
-    val statisShopTotalUVSql =
-      """select shopUuid,
-        |count(distinct userId) totalUV,
-        |'statisShopTotalUV' statisType
-        |from microShopUserBehavior
-        |where eventType='0'
-        |and userId is not null and userId <> '-1'
-        |group by shopUuid""".stripMargin.replaceAll("\n", " ")
-    // 把查询的结果转换成mongo的bsonObject
-    val statisShopTotalUVPairRDD = sqlc.sql(statisShopTotalUVSql).rdd.map({
-      case Row(shopUuid: String, totalUV: Long, statisType: String) => new BasicBSONObject().append("appName", appName).append("shopUuid", shopUuid).append("totalUV", totalUV).append("statisType", statisType)
-    }).map(bson => (null, bson))
-    val statisShopTotalUVQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_SHOP_TOTAL_UV.toString), ("statisDate", getSearchDate(0)))
-    //把查询结果存回数据库
-    saveBackToMongo(statisShopTotalUVPairRDD, statisShopTotalUVQuery, mongoOutputCollection, mongoOutputUriConfig)
-
-    //sql3：统计微店产品热度
+    //sql2：统计微店产品热度
     val statisShopProductSql =
       """select shopUuid,
         |productType,
@@ -174,7 +156,7 @@ object MicroShopUserBehaviorJob {
     val statisShopProductQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_SHOP_PRODUCT.toString))
     saveBackToMongo(statisShopProductPairRDD, statisShopProductQuery, mongoOutputCollection, mongoOutputUriConfig)
 
-    //sql4：统计微店最近访客
+    //sql3：统计微店最近访客
     val statisShopVisitorSql =
       """select shopUuid,
         |userId,
