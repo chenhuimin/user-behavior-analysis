@@ -166,8 +166,7 @@ object MicroShopUserBehaviorJob {
         |where eventType='0'
         |and userId is not null and userId <> '-1'
         |group by shopUuid, userId
-        |order by max(createTime) desc
-        |limit 100""".stripMargin.replaceAll("\n", " ")
+        |order by max(createTime) desc""".stripMargin.replaceAll("\n", " ")
     val statisShopVisitorPairRDD = sqlc.sql(statisShopVisitorSql).rdd.map({
       case Row(shopUuid: String, userId: String, visitTime: Timestamp, statisType: String) => new BasicBSONObject().append("appName", appName).append("shopUuid", shopUuid).append("userId", userId).append("visitTime", visitTime).append("statisType", statisType)
     }).map(bson => (null, bson))
