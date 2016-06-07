@@ -138,9 +138,9 @@ object NewsUserBehaviorJob {
           |to_date('${topNewsEndTime}') statisDate
           |from weixinConsultationBehavior
           |where eventType='1'
-          |and newsId is not null
-          |and newsTitle is not null
-          |and userId is not nul
+          |and newsId is not null and newsId <> ''
+          |and newsTitle is not null and newsTitle <> ''
+          |and userId is not nul and userId <> ''
           |and createTime between '${topNewsBeginTime}' and '${topNewsEndTime}'
           |group by newsId, newsTitle
           |order by pv desc, uv desc""".stripMargin.replaceAll("\n", " ")

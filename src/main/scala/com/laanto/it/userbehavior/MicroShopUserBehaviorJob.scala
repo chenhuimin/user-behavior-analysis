@@ -138,8 +138,8 @@ object MicroShopUserBehaviorJob {
         |'statisShop' statisType
         |from microShopUserBehavior
         |where eventType='0'
-        |and shopUuid is not null
-        |and userId is not null
+        |and shopUuid is not null and shopUuid <> ''
+        |and userId is not null and userId <> ''
         |and createTime >= current_date()
         |and createTime <= current_timestamp()
         |group by to_date(createTime), shopUuid""".stripMargin.replaceAll("\n", " ")
@@ -161,10 +161,10 @@ object MicroShopUserBehaviorJob {
         |'statisShopProduct' statisType
         |from microShopUserBehavior
         |where eventType='2'
-        |and shopUuid is not null
-        |and productType is not null
-        |and productId is not null
-        |and userId is not null
+        |and shopUuid is not null and shopUuid <> ''
+        |and productType is not null and productType <> ''
+        |and productId is not null and productId <> ''
+        |and userId is not null and userId <> ''
         |group by shopUuid, productType, productId
         |order by uv desc, pv desc""".stripMargin.replaceAll("\n", " ")
     val statisShopProductPairRDD = sqlc.sql(statisShopProductSql).rdd.map({
@@ -183,8 +183,8 @@ object MicroShopUserBehaviorJob {
           |'statisShopVisitor' statisType
           |from microShopUserBehavior
           |where eventType='0'
-          |and shopUuid is not null
-          |and userId is not null and userId <> '-1'
+          |and shopUuid is not null and shopUuid <> ''
+          |and userId is not null and userId <> '' and userId <> '-1'
           |and createTime between '${shopVisitorBeginTime}' and current_timestamp()
           |group by shopUuid, userId
           |order by max(createTime) desc""".stripMargin.replaceAll("\n", " ")
@@ -212,10 +212,10 @@ object MicroShopUserBehaviorJob {
           |to_date('${topProductEndTime}') statisDate
           |from microShopUserBehavior
           |where eventType='2'
-          |and companyId is not null
-          |and productId is not null
-          |and productName is not null
-          |and userId is not nul
+          |and companyId is not null and companyId <> ''
+          |and productId is not null and productId <> ''
+          |and productName is not null and productName <> ''
+          |and userId is not nul and userId <> ''
           |and createTime between '${topProductBeginTime}' and '${topProductEndTime}'
           |group by companyId, productId, productName
           |order by pv desc, uv desc""".stripMargin.replaceAll("\n", " ")
@@ -240,9 +240,9 @@ object MicroShopUserBehaviorJob {
           |from microShopUserBehavior
           |where eventType='2'
           |and createTime between '${productVisitorBeginTime}' and current_timestamp()
-          |and shopUuid is not null
-          |and productId is not null
-          |and userId is not null and userId <> '-1'
+          |and shopUuid is not null and shopUuid <> ''
+          |and productId is not null and productId <> ''
+          |and userId is not null and userId <> '' and userId <> '-1'
           |group by shopUuid, productId, userId
           |order by max(createTime) desc""".stripMargin.replaceAll("\n", " ")
     val statisShopProductVisitorPairRDD = sqlc.sql(statisShopProductVisitorSql).rdd.map({
