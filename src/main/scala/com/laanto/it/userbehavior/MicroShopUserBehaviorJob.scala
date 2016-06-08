@@ -219,7 +219,7 @@ object MicroShopUserBehaviorJob {
           |and companyId is not null and companyId <> ''
           |and productId is not null and productId <> ''
           |and productName is not null and productName <> ''
-          |and userId is not nul and userId <> ''
+          |and userId is not null and userId <> ''
           |and createTime between '${topProductBeginTime}' and '${topProductEndTime}'
           |group by companyId, productId, productName
           |order by pv desc, uv desc""".stripMargin.replaceAll("\n", " ")
