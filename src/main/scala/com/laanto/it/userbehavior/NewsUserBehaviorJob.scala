@@ -127,28 +127,29 @@ object NewsUserBehaviorJob {
     val mongoOutputUriConfig = setMongoUri("mongo.output.uri", mongodbHostPortStr, mongodbOutputDatabaseStr, mongodbOutputCollectionStr)
 
     //统计7日客户关注资讯热度
-    val topNewsBeginTime = getSearchDate(7)
-    val topNewsEndTime = getSearchDate(1)
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val topNewsBeginTime = sdf.format(getSearchDate(-7))
+    val topNewsEndTime = sdf.format(getSearchDate(0))
+    val topNewsStatisDate = getSearchDate(-1)
     val statisTopNews7DaysSql =
       s"""select newsId,
           |newsTitle,
           |count(distinct userId) uv,
           |count(*) pv,
-          |'statisTopNews' statisType,
-          |to_date('${topNewsEndTime}') statisDate
+          |'statisTopNews' statisType
           |from weixinConsultationBehavior
           |where eventType='1'
           |and newsId is not null and newsId <> ''
           |and newsTitle is not null and newsTitle <> ''
           |and userId is not null and userId <> ''
-          |and createTime between '${topNewsBeginTime}' and '${topNewsEndTime}'
+          |and createTime >= '${topNewsBeginTime}' and createTime < '${topNewsEndTime}'
           |group by newsId, newsTitle
           |order by pv desc, uv desc""".stripMargin.replaceAll("\n", " ")
     val statisTopNews7DaysPairRDD = sqlc.sql(statisTopNews7DaysSql).rdd.map({
-      case Row(newsId: String, newsTitle: String, uv: Long, pv: Long, statisType: String, statisDate: Timestamp) =>
-        new BasicBSONObject().append("appName", appName).append("newsId", newsId).append("newsTitle", newsTitle).append("uv", uv).append("pv", pv).append("statisType", statisType).append("statisDate", statisDate)
+      case Row(newsId: String, newsTitle: String, uv: Long, pv: Long, statisType: String) =>
+        new BasicBSONObject().append("appName", appName).append("newsId", newsId).append("newsTitle", newsTitle).append("uv", uv).append("pv", pv).append("statisType", statisType).append("statisDate", topNewsStatisDate)
     }).map(bson => (null, bson))
-    val statisTopNews7DaysQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_TOP_NEWS.toString), ("statisDate", topNewsEndTime))
+    val statisTopNews7DaysQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_TOP_NEWS.toString), ("statisDate", topNewsStatisDate))
     val count: Long = mongoOutputCollection.count(statisTopNews7DaysQuery)
     if (count == 0) {
       saveBackToMongo(statisTopNews7DaysPairRDD, mongoOutputUriConfig)
