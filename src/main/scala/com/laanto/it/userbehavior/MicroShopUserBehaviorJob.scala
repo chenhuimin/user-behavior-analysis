@@ -23,7 +23,8 @@ import org.bson.{BSONObject, BasicBSONObject}
   */
 object MicroShopUserBehaviorJob {
 
-  case class MicroShopUserBehavior(appName: String, eventType: String, createTime: Timestamp, userId: String, userName: String, shopUuid: String, productId: String, productType: String, productName: String, readFrom: String, shareTo: String, client: String)
+  case class MicroShopUserBehavior(appName: String, eventType: String, createTime: Timestamp, userId: String, userName: String, shopUuid: String,
+                                   productId: String, productType: String, productName: String, companyId: String, url: String, referrer: String, readFrom: String, shareTo: String, client: String)
 
   object StatisType extends Enumeration {
     val STATIS_SHOP = Value("statisShop")
@@ -56,10 +57,13 @@ object MicroShopUserBehaviorJob {
       val productId: String = if (obj.get("productId") != null) obj.get("productId").toString else null
       val productType: String = if (obj.get("productType") != null) obj.get("productType").toString else null
       val productName: String = if (obj.get("productName") != null) obj.get("productName").toString else null
+      val companyId: String = if (obj.get("companyId") != null) obj.get("companyId").toString else null
+      val url: String = if (obj.get("url") != null) obj.get("url").toString else null
+      val referrer: String = if (obj.get("referrer") != null) obj.get("referrer").toString else null
       val readFrom: String = if (obj.get("readFrom") != null) obj.get("readFrom").toString else null
       val shareTo: String = if (obj.get("shareTo") != null) obj.get("shareTo").toString else null
       val client: String = if (obj.get("client") != null) obj.get("client").toString else null
-      MicroShopUserBehavior(appName, eventType, createTime, userId, userName, shopUuid, productId, productType, productName, readFrom, shareTo, client)
+      MicroShopUserBehavior(appName, eventType, createTime, userId, userName, shopUuid, productId, productType, productName, companyId, url, referrer, readFrom, shareTo, client)
     })
   }
 
