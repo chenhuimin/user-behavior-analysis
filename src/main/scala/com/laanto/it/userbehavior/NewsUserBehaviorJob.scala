@@ -30,7 +30,7 @@ object NewsUserBehaviorJob {
   }
 
   def removeAndSaveBackToMongo(statisNewsPairRDD: RDD[(Null, BasicBSONObject)], statisNewsQuery: DBObject, collection: MongoCollection, mongoConfig: Configuration): Unit = {
-    collection.remove(statisNewsPairRDD)
+    collection.remove(statisNewsQuery)
     statisNewsPairRDD.saveAsNewAPIHadoopFile("file:///bogus", classOf[Object], classOf[BSONObject], classOf[MongoOutputFormat[Object, BSONObject]], mongoConfig)
   }
 
