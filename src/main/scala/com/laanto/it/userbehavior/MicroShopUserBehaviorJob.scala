@@ -174,7 +174,7 @@ object MicroShopUserBehaviorJob {
     val statisShopProductPairRDD = sqlc.sql(statisShopProductSql).rdd.map({
       case Row(shopUuid: String, productType: String, productId: String, uv: Long, pv: Long, statisType: String) => new BasicBSONObject().append("appName", appName).append("shopUuid", shopUuid).append("productType", productType).append("productId", productId).append("uv", uv).append("pv", pv).append("statisType", statisType)
     }).map(bson => (null, bson))
-    val statisShopProductQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_TOP_PRODUCT.toString))
+    val statisShopProductQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_SHOP_PRODUCT.toString))
 
     removeAndSaveBackToMongo(statisShopProductPairRDD, statisShopProductQuery, mongoOutputCollection, mongoOutputUriConfig)
 
@@ -224,11 +224,11 @@ object MicroShopUserBehaviorJob {
           |and createTime >= '${topProductBeginTime}' and createTime < '${topProductEndTime}'
           |group by companyId, productId, productName
           |order by pv desc, uv desc""".stripMargin.replaceAll("\n", " ")
-    val statisTopProduct7DaysPairRDD = sqlc.sql(statisShopProductSql).rdd.map({
+    val statisTopProduct7DaysPairRDD = sqlc.sql(statisTopProduct7DaysSql).rdd.map({
       case Row(companyId: String, productId: String, productName: String, uv: Long, pv: Long, statisType: String) =>
         new BasicBSONObject().append("appName", appName).append("companyId", companyId).append("productId", productId).append("productName", productName).append("uv", uv).append("pv", pv).append("statisType", statisType).append("statisDate", topProductStatisDate)
     }).map(bson => (null, bson))
-    val statisTopProduct7DaysQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_SHOP_PRODUCT.toString), ("statisDate", topProductStatisDate))
+    val statisTopProduct7DaysQuery = MongoDBObject(("appName", appName), ("statisType", StatisType.STATIS_TOP_PRODUCT.toString), ("statisDate", topProductStatisDate))
     val count: Long = mongoOutputCollection.count(statisTopProduct7DaysQuery)
     if (count == 0) {
       saveBackToMongo(statisTopProduct7DaysPairRDD, mongoOutputUriConfig)
