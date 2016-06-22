@@ -141,11 +141,12 @@ object MicroShopUserBehaviorJob {
         |count(*) pv,
         |'statisShop' statisType
         |from microShopUserBehavior
-        |where eventType='0'
+        |where eventType = '0'
         |and shopUuid is not null and shopUuid <> ''
         |and userId is not null and userId <> ''
         |and createTime >= current_date()
         |and createTime <= current_timestamp()
+        |and client = '0'
         |group by to_date(createTime), shopUuid""".stripMargin.replaceAll("\n", " ")
     // 把查询的结果转换成mongo的bsonObject
     val statisShopPairRDD = sqlc.sql(statisShopSql).rdd.map({
@@ -164,11 +165,12 @@ object MicroShopUserBehaviorJob {
         |count(*) pv,
         |'statisShopProduct' statisType
         |from microShopUserBehavior
-        |where eventType='2'
+        |where eventType = '2'
         |and shopUuid is not null and shopUuid <> ''
         |and productType is not null and productType <> ''
         |and productId is not null and productId <> ''
         |and userId is not null and userId <> ''
+        |and client = '0'
         |group by shopUuid, productType, productId
         |order by uv desc, pv desc""".stripMargin.replaceAll("\n", " ")
     val statisShopProductPairRDD = sqlc.sql(statisShopProductSql).rdd.map({
@@ -186,10 +188,11 @@ object MicroShopUserBehaviorJob {
           |max(createTime) visitTime,
           |'statisShopVisitor' statisType
           |from microShopUserBehavior
-          |where eventType='0'
+          |where eventType = '0'
           |and shopUuid is not null and shopUuid <> ''
           |and userId is not null and userId <> '' and userId <> '-1'
           |and createTime between '${shopVisitorBeginTime}' and current_timestamp()
+          |and client = '0'
           |group by shopUuid, userId
           |order by max(createTime) desc""".stripMargin.replaceAll("\n", " ")
     val statisShopVisitorPairRDD = sqlc.sql(statisShopVisitorSql).rdd.map({
@@ -216,7 +219,7 @@ object MicroShopUserBehaviorJob {
           |count(*) pv,
           |'statisTopProduct' statisType
           |from microShopUserBehavior
-          |where eventType='2'
+          |where eventType = '2'
           |and companyId is not null and companyId <> ''
           |and productId is not null and productId <> ''
           |and productName is not null and productName <> ''
@@ -243,11 +246,12 @@ object MicroShopUserBehaviorJob {
           |max(createTime) visitTime,
           |'statisShopProductVisitor' statisType
           |from microShopUserBehavior
-          |where eventType='2'
+          |where eventType = '2'
           |and createTime between '${productVisitorBeginTime}' and current_timestamp()
           |and shopUuid is not null and shopUuid <> ''
           |and productId is not null and productId <> ''
           |and userId is not null and userId <> '' and userId <> '-1'
+          |and client = '0'
           |group by shopUuid, productId, userId
           |order by max(createTime) desc""".stripMargin.replaceAll("\n", " ")
     val statisShopProductVisitorPairRDD = sqlc.sql(statisShopProductVisitorSql).rdd.map({
