@@ -143,7 +143,7 @@ object MicroShopUserBehaviorJob {
         |from microShopUserBehavior
         |where eventType = '0'
         |and shopUuid is not null and shopUuid <> ''
-        |and userId is not null and userId <> ''
+        |and userId is not null and userId <> '' and userId <> '-1'
         |and createTime >= current_date()
         |and createTime <= current_timestamp()
         |and client = '0'
@@ -169,7 +169,7 @@ object MicroShopUserBehaviorJob {
         |and shopUuid is not null and shopUuid <> ''
         |and productType is not null and productType <> ''
         |and productId is not null and productId <> ''
-        |and userId is not null and userId <> ''
+        |and userId is not null and userId <> '' and userId <> '-1'
         |and client = '0'
         |group by shopUuid, productType, productId
         |order by uv desc, pv desc""".stripMargin.replaceAll("\n", " ")
