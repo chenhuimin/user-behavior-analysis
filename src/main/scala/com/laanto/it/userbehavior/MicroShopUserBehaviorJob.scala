@@ -141,7 +141,7 @@ object MicroShopUserBehaviorJob {
         |count(*) pv,
         |'statisShop' statisType
         |from microShopUserBehavior
-        |where eventType = '0'
+        |where eventType in ('0','1','2','3','7','8','10','11')
         |and shopUuid is not null and shopUuid <> ''
         |and userId is not null and userId <> '' and userId <> '-1'
         |and createTime >= current_date()
@@ -188,8 +188,7 @@ object MicroShopUserBehaviorJob {
           |max(createTime) visitTime,
           |'statisShopVisitor' statisType
           |from microShopUserBehavior
-          |where eventType = '0'
-          |and shopUuid is not null and shopUuid <> ''
+          |where shopUuid is not null and shopUuid <> ''
           |and userId is not null and userId <> '' and userId <> '-1'
           |and createTime between '${shopVisitorBeginTime}' and current_timestamp()
           |and client = '0'
